@@ -22,7 +22,10 @@ func TestLifecycleWithStubPortless(t *testing.T) {
 	// for the real wrapper-that-holds-a-dev-server.
 	stubDir := t.TempDir()
 	stub := filepath.Join(stubDir, "portless")
-	if err := os.WriteFile(stub, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
+	// `get` echoes the canonical URL; any other invocation is the launch wrapper,
+	// which just stays alive standing in for a running dev server.
+	script := "#!/bin/sh\n[ \"$1\" = get ] && echo \"http://$2.localhost\" && exit 0\nexec sleep 30\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", stubDir+":"+os.Getenv("PATH"))
@@ -58,8 +61,8 @@ func TestLifecycleWithStubPortless(t *testing.T) {
 	if len(rows) != 1 || rows[0].Name != "demo" || !rows[0].Running {
 		t.Fatalf("List = %+v", rows)
 	}
-	if rows[0].URL != "https://demo.localhost" {
-		t.Fatalf("URL = %q", rows[0].URL)
+	if rows[0].URL != "http://demo.localhost" {
+		t.Fatalf("URL = %q, want http://demo.localhost (from stub portless get)", rows[0].URL)
 	}
 
 	// Graceful stop tears the process group down.

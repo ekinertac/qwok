@@ -14,7 +14,9 @@ package portless
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -85,6 +87,51 @@ func subdomain(hostname string) string {
 	return hostname
 }
 
-// URL is the deterministic browser URL for an app. portless defaults to HTTPS on
-// 443 with the .localhost TLD, so the URL never needs the port to be reachable.
-func URL(name string) string { return "https://" + name + ".localhost" }
+// URL returns the canonical browser URL for an app.
+//
+// We do NOT construct it ourselves: the scheme (http vs https), port, and TLD
+// all depend on how the user started the proxy (e.g. `sudo portless proxy start
+// --no-tls` serves http on :80, not https on :443). Hardcoding https was a real
+// bug — it pointed users at a port nothing was serving. Instead we ask portless
+// via `portless get <name>`, a documented single-value command meant for
+// programmatic wiring; its output reflects the live proxy config (and any git
+// worktree prefix when evaluated from dir). This is a stable contract, distinct
+// from scraping `portless list` table text, which we still never do.
+//
+// dir should be the app's project directory so worktree detection matches what
+// `portless run` produced. On any failure (portless absent, etc.) we fall back
+// to a best-effort URL derived from the persisted proxy port.
+func URL(name, dir string) string {
+	cmd := exec.Command("portless", "get", name)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	out, err := cmd.Output()
+	if err == nil {
+		if u := strings.TrimSpace(string(out)); u != "" {
+			return u
+		}
+	}
+	return fallbackURL(name)
+}
+
+// fallbackURL derives a best-effort URL from the persisted proxy port when
+// portless cannot be queried. Scheme is inferred from the port: 80 → http,
+// 443 or unknown → https, any other port → http with the port appended (portless
+// only uses non-default ports in its no-TLS/sudo-less fallbacks). Cosmetic only;
+// the real path is `portless get` above.
+func fallbackURL(name string) string {
+	host := name + ".localhost"
+	port := ""
+	if data, err := os.ReadFile(filepath.Join(stateDir(), "proxy.port")); err == nil {
+		port = strings.TrimSpace(string(data))
+	}
+	switch port {
+	case "", "443":
+		return "https://" + host
+	case "80":
+		return "http://" + host
+	default:
+		return fmt.Sprintf("http://%s:%s", host, port)
+	}
+}

@@ -83,7 +83,7 @@ for that. The split:
 ┌──────────────────────▼──────────────────────────────────┐
 │  portless (the engine)                                   │
 │  • assigns free port (4000–4999), runs HTTPS proxy :443  │
-│  • https://<name>.localhost  ← deterministic from name   │
+│  • <scheme>://<name>.localhost ← from `portless get`     │
 │  • registers route on start; route auto-expires when the │
 │    owning PID dies (portless filters dead PIDs on read)  │
 └──────────────────────────────────────────────────────────┘
@@ -180,7 +180,7 @@ qwok rm <name> [--keep-file]
    + any `.qwok.toml` `env`. `Start()` it, do **not** `Wait()` — qwok returns
    immediately; the child reparents to launchd and survives qwok's exit.
 5. Write the child's PID (the group-leader PID) to `pids/<name>.pid`.
-6. Print `https://<name>.localhost`.
+6. Print the app's URL from `portless get <name>` (scheme/port reflect the proxy).
 
 portless assigns the port, starts/auto-starts the proxy, and registers the route.
 The process tree is `qwok → portless (group leader) → dev server`; signalling the
@@ -193,9 +193,13 @@ For `list` / status of `<name>`:
 - **stopped** otherwise (missing or dead PID hint).
 - **Enrichment:** read `~/.portless/routes.json` (a JSON array of
   `{hostname, port, pid}`). If `<name>.localhost` is present *and its PID is
-  alive*, show the port; the URL is always `https://<name>.localhost`
-  (deterministic from the name, so a port is never required to build it).
-- Honor `PORTLESS_STATE_DIR` when locating `routes.json`.
+  alive*, show the port.
+- **URL:** obtained from `portless get <name>` (run with the project dir as cwd),
+  not constructed. The scheme/port/TLD depend on how the proxy was started — a
+  `sudo portless proxy start --no-tls` proxy serves `http://<name>.localhost` on
+  :80, so hardcoding `https://` was wrong. A proxy-port heuristic is the fallback
+  when portless can't be queried.
+- Honor `PORTLESS_STATE_DIR` when locating `routes.json` and `proxy.port`.
 
 This means qwok and portless never disagree for long: both treat a dead PID as a
 dead app. Even a hard `kill` self-heals — portless filters the stale route on its

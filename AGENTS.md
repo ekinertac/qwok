@@ -8,8 +8,12 @@ background, wrapping **portless** for named `https://<name>.localhost` URLs.
 
 - **Wrap portless, never fork/reimplement it.** Launch by shelling out to
   `portless <name> <cmd>`. Read live status from `~/.portless/routes.json`
-  (structured JSON, honor `PORTLESS_STATE_DIR`). **Never** parse portless's
-  human-readable CLI text — `routes.json` is the only machine contract we read.
+  (structured JSON, honor `PORTLESS_STATE_DIR`). Get an app's URL from
+  `portless get <name>` (a documented single-value command — the URL reflects the
+  live proxy scheme/port/TLD, which is NOT knowable by construction: e.g. a
+  `--no-tls` proxy serves http on :80, not https on :443). **Never** parse
+  portless's human-readable *table* output (`portless list`); `routes.json` and
+  the single-value `get` are the only machine contracts we depend on.
 - **Daemonless.** qwok has no long-running process. `run` detaches a process into
   its own session/process-group and returns. No supervisor, no auto-restart
   (frameworks hot-reload themselves; a supervisor would mask real crashes).

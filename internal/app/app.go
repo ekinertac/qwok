@@ -100,7 +100,7 @@ func Run(name string, force bool) (string, error) {
 	}
 	if Running(name) {
 		if !force {
-			return "", fmt.Errorf("app %q is already running at %s", name, portless.URL(name))
+			return "", fmt.Errorf("app %q is already running at %s", name, portless.URL(name, entry.Path))
 		}
 		if err := Stop(name); err != nil {
 			return "", err
@@ -128,7 +128,7 @@ func Run(name string, force bool) (string, error) {
 	if err := process.WritePID(state.PIDPath(name), pid); err != nil {
 		return "", err
 	}
-	return portless.URL(name), nil
+	return portless.URL(name, entry.Path), nil
 }
 
 // List returns a derived status snapshot for every registered app.
@@ -139,7 +139,8 @@ func List() ([]Status, error) {
 	}
 	var out []Status
 	for _, name := range reg.Names() {
-		s := Status{Name: name, Path: reg.Apps[name].Path, URL: portless.URL(name)}
+		path := reg.Apps[name].Path
+		s := Status{Name: name, Path: path, URL: portless.URL(name, path)}
 		s.Running = Running(name)
 		if s.Running {
 			if r, ok := portless.RouteFor(name); ok {
@@ -190,12 +191,13 @@ func LogPath(name string) (string, error) {
 	return state.LogPath(name), nil
 }
 
-// URL exposes the deterministic URL for the `open` command.
+// URL exposes the canonical URL for the `open` command.
 func URL(name string) (string, error) {
-	if _, _, err := resolve(name); err != nil {
+	entry, _, err := resolve(name)
+	if err != nil {
 		return "", err
 	}
-	return portless.URL(name), nil
+	return portless.URL(name, entry.Path), nil
 }
 
 // Remove stops the app if running, drops its registry entry, and (unless
