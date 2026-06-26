@@ -34,7 +34,10 @@ func Launch(dir string, argv []string, env map[string]string, logPath string) (i
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
 		return 0, err
 	}
-	logf, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	// O_TRUNC: each run starts a fresh log so `qwok logs` shows only the current
+	// session, not output accumulated across previous runs. The detached child
+	// inherits this fd and writes from offset 0.
+	logf, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return 0, err
 	}

@@ -40,7 +40,9 @@ func stateDir() string {
 // RegistryPath is the global name→path index.
 func RegistryPath() string { return filepath.Join(configDir(), "registry.toml") }
 
-// LogPath is where a running app's captured stdout+stderr is appended.
+// LogPath is where a running app's captured stdout+stderr is written. The file
+// is truncated at each run (see process.Launch) so it holds only the current
+// session's output.
 func LogPath(name string) string { return filepath.Join(stateDir(), "logs", name+".log") }
 
 // PIDPath holds the hint PID of the detached portless wrapper for an app. It is

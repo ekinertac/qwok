@@ -3,8 +3,11 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/ekinertac/qwok/internal/state"
 )
 
 // TestLifecycleWithStubPortless exercises the full daemonless flow end to end:
@@ -39,8 +42,19 @@ func TestLifecycleWithStubPortless(t *testing.T) {
 		t.Fatal("should not be running before run")
 	}
 
+	// Seed a stale log so we can prove run truncates it (the stub writes nothing).
+	logPath := state.LogPath("demo")
+	_ = os.MkdirAll(filepath.Dir(logPath), 0o755)
+	if err := os.WriteFile(logPath, []byte("STALE OUTPUT FROM A PREVIOUS RUN\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := Run("demo", false); err != nil {
 		t.Fatalf("Run: %v", err)
+	}
+
+	if data, _ := os.ReadFile(logPath); strings.Contains(string(data), "STALE") {
+		t.Fatalf("log was not truncated on run: %q", data)
 	}
 	t.Cleanup(func() { _ = Kill("demo") }) // never leak the stub
 
