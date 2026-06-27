@@ -37,6 +37,11 @@ background, wrapping **portless** for named `https://<name>.localhost` URLs.
 `add` · `run` · `list`/`ls` · `stop` (SIGTERM group) · `kill` (SIGKILL group) ·
 `restart` · `logs [-f]` · `open` · `rm [--keep-file]`.
 
+`run` with no name infers the app from the nearest `.qwok.toml` (walks up from
+cwd, self-registers if needed). `run` also ensures the portless proxy is up
+first — it starts it in the foreground (so portless can sudo-prompt once) when
+the proxy pid is dead, since the detached launch has no TTY for that prompt.
+
 ## Conventions
 
 - Every file starts with a file-level comment block (what it does, where it fits,

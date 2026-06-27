@@ -25,9 +25,13 @@ func TestLifecycleWithStubPortless(t *testing.T) {
 	// for the real wrapper-that-holds-a-dev-server.
 	stubDir := t.TempDir()
 	stub := filepath.Join(stubDir, "portless")
-	// `get` echoes the canonical URL; any other invocation is the launch wrapper,
-	// which just stays alive standing in for a running dev server.
-	script := "#!/bin/sh\n[ \"$1\" = get ] && echo \"http://$2.localhost\" && exit 0\nexec sleep 30\n"
+	// `get` echoes the canonical URL; `proxy start` is a no-op (proxy-ensure);
+	// any other invocation is the launch wrapper, which stays alive standing in
+	// for a running dev server.
+	script := "#!/bin/sh\n" +
+		"[ \"$1\" = get ] && echo \"http://$2.localhost\" && exit 0\n" +
+		"[ \"$1\" = proxy ] && exit 0\n" +
+		"exec sleep 30\n"
 	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

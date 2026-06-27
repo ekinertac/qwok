@@ -29,6 +29,29 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestFindWalksUp(t *testing.T) {
+	root := t.TempDir()
+	if err := Save(root, &Convention{Name: "myapp", Cmd: "npm run dev"}); err != nil {
+		t.Fatal(err)
+	}
+	// From a nested subdirectory, Find should locate the project's .qwok.toml.
+	sub := filepath.Join(root, "src", "components")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir, c, err := Find(sub)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if dir != root || c.Name != "myapp" {
+		t.Fatalf("Find = (%q, %+v), want root=%q name=myapp", dir, c, root)
+	}
+	// A directory with no .qwok.toml anywhere above returns an error.
+	if _, _, err := Find(t.TempDir()); err == nil {
+		t.Fatal("expected error when no .qwok.toml exists above")
+	}
+}
+
 func TestLoadValidatesRequiredFields(t *testing.T) {
 	dir := t.TempDir()
 	// name present, cmd missing -> error.

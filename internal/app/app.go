@@ -91,6 +91,33 @@ func Running(name string) bool {
 	return process.IsAlive(process.ReadPID(state.PIDPath(name)))
 }
 
+// LocalName resolves the app name for an argument-less command (e.g. `qwok run`
+// with no name) by finding the nearest .qwok.toml from the current directory. If
+// that project isn't registered yet (e.g. the .qwok.toml was committed and
+// cloned elsewhere), it self-registers from the file's location so `qwok run`
+// just works wherever the project lives.
+func LocalName() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	dir, conv, err := convention.Find(cwd)
+	if err != nil {
+		return "", fmt.Errorf("not in a qwok project (no .qwok.toml here or above) — run 'qwok add' or name an app: 'qwok run <name>'")
+	}
+	reg, err := registry.Load()
+	if err != nil {
+		return "", err
+	}
+	if _, ok := reg.Get(conv.Name); !ok {
+		reg.Set(conv.Name, registry.Entry{Path: dir})
+		if err := registry.Save(reg); err != nil {
+			return "", err
+		}
+	}
+	return conv.Name, nil
+}
+
 // Run launches the app detached through portless. Refuses a double-start unless
 // force is set (in which case it stops the old one first).
 func Run(name string, force bool) (string, error) {
@@ -108,6 +135,16 @@ func Run(name string, force bool) (string, error) {
 	}
 	if _, err := exec.LookPath("portless"); err != nil {
 		return "", fmt.Errorf("portless not found on PATH — install it: npm i -g portless (or brew install portless)")
+	}
+
+	// Ensure the proxy is up before detaching the app. portless can auto-start it,
+	// but only with a TTY for the sudo prompt — which the detached launch lacks. So
+	// we start it here in the foreground (prompting once per boot), then launch.
+	if !portless.ProxyRunning() {
+		fmt.Fprintln(os.Stderr, "portless proxy isn't running — starting it (may ask for your password)…")
+		if err := portless.StartProxy(); err != nil {
+			return "", fmt.Errorf("starting portless proxy: %w", err)
+		}
 	}
 
 	cmdTokens, err := splitCommand(conv.Cmd)

@@ -18,7 +18,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 )
 
 // Route mirrors one entry of portless's routes.json. Extra portless fields
@@ -85,6 +87,40 @@ func subdomain(hostname string) string {
 		return hostname[:i]
 	}
 	return hostname
+}
+
+// ProxyRunning reports whether portless's reverse-proxy daemon is up, by reading
+// its pid file and checking the process is alive — the same derive-from-the-OS
+// approach qwok uses for apps, so we never trust a stale pid file.
+func ProxyRunning() bool {
+	data, err := os.ReadFile(filepath.Join(stateDir(), "proxy.pid"))
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return false
+	}
+	// signal 0 probes existence; EPERM means it exists but isn't ours (still up).
+	if err := syscall.Kill(pid, 0); err == nil || err == syscall.EPERM {
+		return true
+	}
+	return false
+}
+
+// StartProxy starts the portless proxy in the FOREGROUND with our terminal
+// attached, so portless can auto-elevate via sudo (prompting the user once) and
+// so any output is visible. It passes no flags: portless reuses the proxy config
+// (port/TLS/TLD) from its last run, so the proxy comes back in whatever mode the
+// user last chose without qwok having to store that preference. portless
+// daemonizes the proxy and returns. Proxy chatter goes to stderr to keep qwok's
+// stdout clean for its own structured output.
+func StartProxy() error {
+	cmd := exec.Command("portless", "proxy", "start")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // URL returns the canonical browser URL for an app.

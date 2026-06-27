@@ -23,7 +23,7 @@ const usage = `qwok — run your local dev apps by name
 
 Usage:
   qwok add <name> --cmd "<command>" [--cwd <dir>] [--app-port N] [--env K=V ...]
-  qwok run <name> [--force]
+  qwok run [<name>] [--force]    (no name: infer from .qwok.toml in the current dir)
   qwok list                       (alias: ls)
   qwok stop <name>                graceful SIGTERM
   qwok kill <name>                forceful SIGKILL
@@ -118,7 +118,12 @@ func cmdRun(args []string) error {
 		return err
 	}
 	if name == "" {
-		return fmt.Errorf("usage: qwok run <name>")
+		// No name: infer the app from the nearest .qwok.toml (run from a project dir).
+		n, err := app.LocalName()
+		if err != nil {
+			return err
+		}
+		name = n
 	}
 	url, err := app.Run(name, *force)
 	if err != nil {

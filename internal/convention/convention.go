@@ -92,3 +92,25 @@ func Exists(dir string) bool {
 	_, err := os.Stat(Path(dir))
 	return err == nil
 }
+
+// Find walks up from startDir looking for the nearest .qwok.toml, returning its
+// directory and parsed contents. This is what lets `qwok run` work with no name
+// from anywhere inside a project tree (mirrors how portless finds its config).
+func Find(startDir string) (string, *Convention, error) {
+	dir := startDir
+	for {
+		if Exists(dir) {
+			c, err := Load(dir)
+			if err != nil {
+				return "", nil, err
+			}
+			return dir, c, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir { // reached filesystem root
+			break
+		}
+		dir = parent
+	}
+	return "", nil, fmt.Errorf("no %s found in %s or any parent directory", FileName, startDir)
+}

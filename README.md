@@ -47,11 +47,13 @@ qwok needs **portless** at runtime:
 npm install -g portless     # or: brew install portless
 ```
 
-Start the portless proxy once (it persists across reboots of your session):
+You don't need to start the proxy yourself — `qwok run` starts it for you if it's
+down (portless binds a privileged port, so the first run after a reboot may ask
+for your password once). To pick http vs https, start it once in the mode you
+want and qwok will reuse it:
 
 ```sh
-sudo portless proxy start              # https on :443
-# or, no TLS:
+sudo portless proxy start              # https on :443 (default)
 sudo portless proxy start --no-tls     # http on :80
 ```
 
@@ -59,7 +61,7 @@ sudo portless proxy start --no-tls     # http on :80
 
 ```sh
 qwok add <name> --cmd "<command>" [--cwd <dir>] [--app-port N] [--env K=V ...]
-qwok run <name> [--force]
+qwok run [<name>] [--force]     # no name: infer from the .qwok.toml in the current dir
 qwok list                       # alias: ls
 qwok stop <name>                # graceful SIGTERM
 qwok kill <name>                # forceful SIGKILL
