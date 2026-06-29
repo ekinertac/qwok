@@ -38,9 +38,15 @@ background, wrapping **portless** for named `https://<name>.localhost` URLs.
 `restart` · `logs [-f]` · `open` · `rm [--keep-file]`.
 
 `run` with no name infers the app from the nearest `.qwok.toml` (walks up from
-cwd, self-registers if needed). `run` also ensures the portless proxy is up
-first — it starts it in the foreground (so portless can sudo-prompt once) when
-the proxy pid is dead, since the detached launch has no TTY for that prompt.
+cwd, self-registers if needed).
+
+Apps have a `type` (`.qwok.toml`, default `web`): `web` wraps the command in
+portless (free port + proxy + `.localhost` URL) and `run` ensures the proxy is up
+first — starting it in the foreground so portless can sudo-prompt once, since the
+detached launch has no TTY for that prompt. `app` (`qwok add --app`) is for
+desktop/non-web projects: the command runs directly, no portless, no URL,
+`app_port` ignored. The whole process/registry/lifecycle core is type-agnostic;
+only the portless wrap, URL, and proxy-ensure are gated on `type == web`.
 
 ## Conventions
 

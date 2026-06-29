@@ -22,7 +22,8 @@ import (
 const usage = `qwok — run your local dev apps by name
 
 Usage:
-  qwok add <name> --cmd "<command>" [--cwd <dir>] [--app-port N] [--env K=V ...]
+  qwok add <name> --cmd "<command>" [--app] [--cwd <dir>] [--app-port N] [--env K=V ...]
+                                 (--app = desktop/non-web: run directly, no portless/URL)
   qwok run [<name>] [--force]    (no name: infer from .qwok.toml in the current dir)
   qwok list                       (alias: ls)
   qwok stop <name>                graceful SIGTERM
@@ -90,7 +91,8 @@ func cmdAdd(args []string) error {
 	cwd, _ := os.Getwd()
 	dir := fs.String("cwd", cwd, "project directory")
 	cmd := fs.String("cmd", "", "dev command to run (required)")
-	port := fs.Int("app-port", 0, "pin a fixed port (default: portless auto-assigns)")
+	asApp := fs.Bool("app", false, "desktop/non-web app: run directly, no portless or URL")
+	port := fs.Int("app-port", 0, "pin a fixed port (web apps only; default: portless auto-assigns)")
 	force := fs.Bool("force", false, "overwrite an existing registration")
 	env := envFlag{}
 	fs.Var(env, "env", "extra environment as K=V (repeatable)")
@@ -99,10 +101,14 @@ func cmdAdd(args []string) error {
 		return err
 	}
 	if name == "" || *cmd == "" {
-		return fmt.Errorf("usage: qwok add <name> --cmd \"<command>\" [--cwd <dir>]")
+		return fmt.Errorf("usage: qwok add <name> --cmd \"<command>\" [--app] [--cwd <dir>]")
+	}
+	typ := "web"
+	if *asApp {
+		typ = "app"
 	}
 	if err := app.Add(app.AddOptions{
-		Name: name, Cwd: *dir, Cmd: *cmd, AppPort: *port, Env: env, Force: *force,
+		Name: name, Cwd: *dir, Cmd: *cmd, Type: typ, AppPort: *port, Env: env, Force: *force,
 	}); err != nil {
 		return err
 	}
@@ -129,7 +135,11 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("started %q -> %s\n", name, url)
+	if url == "" { // app-type: no URL to show
+		fmt.Printf("started %q\n", name)
+	} else {
+		fmt.Printf("started %q -> %s\n", name, url)
+	}
 	return nil
 }
 
@@ -143,7 +153,7 @@ func cmdList(_ []string) error {
 		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tSTATUS\tURL\tPORT")
+	fmt.Fprintln(w, "NAME\tTYPE\tSTATUS\tURL\tPORT")
 	for _, s := range rows {
 		status := "stopped"
 		port := ""
@@ -153,7 +163,11 @@ func cmdList(_ []string) error {
 				port = fmt.Sprintf("%d", s.Port)
 			}
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Name, status, s.URL, port)
+		url := s.URL
+		if url == "" { // app-type has no URL
+			url = "—"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", s.Name, s.Type, status, url, port)
 	}
 	return w.Flush()
 }

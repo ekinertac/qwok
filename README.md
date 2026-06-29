@@ -1,11 +1,12 @@
 # qwok
 
-Run your local dev apps by name. A tiny, daemonless CLI that registers your
-projects and starts/stops them in the background, wrapping
-[portless](https://github.com/portless/portless) so each one gets a named
-`*.localhost` URL instead of a port you have to remember.
+Run your local projects by name. A tiny, daemonless CLI that registers your
+projects and starts/stops them in the background. Web apps are wrapped in
+[portless](https://github.com/portless/portless) so each gets a named
+`*.localhost` URL instead of a port you have to remember; desktop / non-web
+projects (Swift, Flutter, Electron…) run directly with `--app`.
 
-Think `pm2`, but for the local dev servers you spin up all week.
+Think `pm2`, but for everything you spin up all week.
 
 ```console
 $ qwok add myapp --cmd "npm run dev"
@@ -60,7 +61,7 @@ sudo portless proxy start --no-tls     # http on :80
 ## Usage
 
 ```sh
-qwok add <name> --cmd "<command>" [--cwd <dir>] [--app-port N] [--env K=V ...]
+qwok add <name> --cmd "<command>" [--app] [--cwd <dir>] [--app-port N] [--env K=V ...]
 qwok run [<name>] [--force]     # no name: infer from the .qwok.toml in the current dir
 qwok list                       # alias: ls
 qwok stop <name>                # graceful SIGTERM
@@ -83,7 +84,23 @@ cmd  = "npm run dev"
 # DEBUG = "1"
 ```
 
-### A note on ports
+### Desktop / non-web apps
+
+Projects without a port — a Swift binary, a Flutter desktop target, an Electron
+build — register with `--app`:
+
+```sh
+qwok add my-mac-app --cmd "swift run" --app
+qwok add my-flutter --cmd "flutter run -d macos" --app
+```
+
+`--app` skips portless entirely: the command runs directly, there's no `.localhost`
+URL, and `qwok list` shows it as `type=app`. Everything else — background launch,
+`list`/`logs`/`stop`/`kill`/`restart`, status — works the same. It's for
+*launch-and-leave-running* programs (servers, GUI apps, watchers); interactive
+terminal programs that need a foreground TTY aren't a fit.
+
+### A note on ports (web apps)
 
 portless assigns each app a free port and routes its `.localhost` URL to it.
 Frameworks that read `PORT` (Next, Express, Nuxt…) or that portless knows about

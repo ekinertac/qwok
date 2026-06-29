@@ -29,6 +29,35 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestTypeRoundTripAndDefault(t *testing.T) {
+	// No type -> defaults to web (backward compatible).
+	web := t.TempDir()
+	if err := Save(web, &Convention{Name: "a", Cmd: "npx vite"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := Load(web); err != nil || c.Type != TypeWeb {
+		t.Fatalf("default type: %+v, %v (want web)", c, err)
+	}
+
+	// Explicit app type round-trips.
+	desk := t.TempDir()
+	if err := Save(desk, &Convention{Name: "b", Cmd: "swift run", Type: TypeApp}); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := Load(desk); err != nil || c.Type != TypeApp {
+		t.Fatalf("app type: %+v, %v (want app)", c, err)
+	}
+
+	// An unknown type is rejected.
+	bad := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bad, FileName), []byte("name=\"x\"\ncmd=\"y\"\ntype=\"bogus\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(bad); err == nil {
+		t.Fatal("expected error for invalid type")
+	}
+}
+
 func TestFindWalksUp(t *testing.T) {
 	root := t.TempDir()
 	if err := Save(root, &Convention{Name: "myapp", Cmd: "npm run dev"}); err != nil {

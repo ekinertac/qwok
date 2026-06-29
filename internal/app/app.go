@@ -28,9 +28,10 @@ import (
 type Status struct {
 	Name    string
 	Path    string
+	Type    string // "web" or "app"
 	Running bool
-	URL     string
-	Port    int // from portless route store, 0 if unknown/not routed
+	URL     string // empty for app-type (no portless route)
+	Port    int    // from portless route store, 0 if unknown/not routed
 }
 
 // AddOptions carries the explicit registration inputs (no auto-detection).
@@ -38,6 +39,7 @@ type AddOptions struct {
 	Name    string
 	Cwd     string
 	Cmd     string
+	Type    string // "web" (default) or "app"
 	AppPort int
 	Env     map[string]string
 	Force   bool
@@ -61,7 +63,7 @@ func Add(o AddOptions) error {
 		return fmt.Errorf("app %q already registered (use --force to overwrite)", o.Name)
 	}
 	if err := convention.Save(abs, &convention.Convention{
-		Name: o.Name, Cmd: o.Cmd, AppPort: o.AppPort, Env: o.Env,
+		Name: o.Name, Cmd: o.Cmd, Type: o.Type, AppPort: o.AppPort, Env: o.Env,
 	}); err != nil {
 		return err
 	}
@@ -125,25 +127,16 @@ func Run(name string, force bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	isApp := conv.Type == convention.TypeApp
 	if Running(name) {
 		if !force {
+			if isApp {
+				return "", fmt.Errorf("app %q is already running", name)
+			}
 			return "", fmt.Errorf("app %q is already running at %s", name, portless.URL(name, entry.Path))
 		}
 		if err := Stop(name); err != nil {
 			return "", err
-		}
-	}
-	if _, err := exec.LookPath("portless"); err != nil {
-		return "", fmt.Errorf("portless not found on PATH — install it: npm i -g portless (or brew install portless)")
-	}
-
-	// Ensure the proxy is up before detaching the app. portless can auto-start it,
-	// but only with a TTY for the sudo prompt — which the detached launch lacks. So
-	// we start it here in the foreground (prompting once per boot), then launch.
-	if !portless.ProxyRunning() {
-		fmt.Fprintln(os.Stderr, "portless proxy isn't running — starting it (may ask for your password)…")
-		if err := portless.StartProxy(); err != nil {
-			return "", fmt.Errorf("starting portless proxy: %w", err)
 		}
 	}
 
@@ -151,12 +144,32 @@ func Run(name string, force bool) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid cmd in %s: %w", convention.Path(entry.Path), err)
 	}
-	// portless <name> [--app-port N] <cmd...>
-	argv := []string{"portless", name}
-	if conv.AppPort > 0 {
-		argv = append(argv, "--app-port", strconv.Itoa(conv.AppPort))
+
+	// The argv we launch detached differs by type: app-type runs the command
+	// directly (no portless, no URL); web-type wraps it in portless after ensuring
+	// the proxy is up.
+	var argv []string
+	if isApp {
+		argv = cmdTokens
+	} else {
+		if _, err := exec.LookPath("portless"); err != nil {
+			return "", fmt.Errorf("portless not found on PATH — install it: npm i -g portless (or brew install portless)")
+		}
+		// Ensure the proxy is up before detaching. portless can auto-start it, but
+		// only with a TTY for the sudo prompt — which the detached launch lacks. So
+		// we start it here in the foreground (prompting once per boot), then launch.
+		if !portless.ProxyRunning() {
+			fmt.Fprintln(os.Stderr, "portless proxy isn't running — starting it (may ask for your password)…")
+			if err := portless.StartProxy(); err != nil {
+				return "", fmt.Errorf("starting portless proxy: %w", err)
+			}
+		}
+		argv = []string{"portless", name} // portless <name> [--app-port N] <cmd...>
+		if conv.AppPort > 0 {
+			argv = append(argv, "--app-port", strconv.Itoa(conv.AppPort))
+		}
+		argv = append(argv, cmdTokens...)
 	}
-	argv = append(argv, cmdTokens...)
 
 	pid, err := process.Launch(entry.Path, argv, conv.Env, state.LogPath(name))
 	if err != nil {
@@ -164,6 +177,9 @@ func Run(name string, force bool) (string, error) {
 	}
 	if err := process.WritePID(state.PIDPath(name), pid); err != nil {
 		return "", err
+	}
+	if isApp {
+		return "", nil // no URL for desktop apps
 	}
 	return portless.URL(name, entry.Path), nil
 }
@@ -177,11 +193,17 @@ func List() ([]Status, error) {
 	var out []Status
 	for _, name := range reg.Names() {
 		path := reg.Apps[name].Path
-		s := Status{Name: name, Path: path, URL: portless.URL(name, path)}
+		s := Status{Name: name, Path: path, Type: convention.TypeWeb}
 		s.Running = Running(name)
-		if s.Running {
-			if r, ok := portless.RouteFor(name); ok {
-				s.Port = r.Port
+		// app-type apps have no portless route/URL; only enrich web apps.
+		if conv, err := convention.Load(path); err == nil && conv.Type == convention.TypeApp {
+			s.Type = convention.TypeApp
+		} else {
+			s.URL = portless.URL(name, path)
+			if s.Running {
+				if r, ok := portless.RouteFor(name); ok {
+					s.Port = r.Port
+				}
 			}
 		}
 		out = append(out, s)
@@ -228,11 +250,15 @@ func LogPath(name string) (string, error) {
 	return state.LogPath(name), nil
 }
 
-// URL exposes the canonical URL for the `open` command.
+// URL exposes the canonical URL for the `open` command. App-type projects have
+// no URL, so this reports that rather than inventing one.
 func URL(name string) (string, error) {
-	entry, _, err := resolve(name)
+	entry, conv, err := resolve(name)
 	if err != nil {
 		return "", err
+	}
+	if conv.Type == convention.TypeApp {
+		return "", fmt.Errorf("%q is a desktop app (type=app) — it has no URL to open", name)
 	}
 	return portless.URL(name, entry.Path), nil
 }

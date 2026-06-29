@@ -23,11 +23,22 @@ import (
 // FileName is the convention file's fixed name, looked up at a project root.
 const FileName = ".qwok.toml"
 
+// App types. "web" routes through portless (free port + proxy + .localhost URL);
+// "app" runs the command directly with no portless involvement, for desktop /
+// non-web projects (Swift, Flutter, Electron builds, …) that have no PORT or URL.
+const (
+	TypeWeb = "web"
+	TypeApp = "app"
+)
+
 // Convention is the parsed .qwok.toml. Name must match the registry key and the
-// portless route/subdomain so https://<name>.localhost is consistent everywhere.
+// portless route/subdomain so http(s)://<name>.localhost is consistent for web
+// apps. Type selects the run model (see the Type* constants); AppPort applies
+// only to web apps.
 type Convention struct {
 	Name    string            `toml:"name"`
 	Cmd     string            `toml:"cmd"`
+	Type    string            `toml:"type,omitempty"`
 	AppPort int               `toml:"app_port,omitempty"`
 	Env     map[string]string `toml:"env,omitempty"`
 }
@@ -54,6 +65,12 @@ func Load(dir string) (*Convention, error) {
 	if c.Cmd == "" {
 		return nil, fmt.Errorf("%s: missing required field 'cmd'", p)
 	}
+	if c.Type == "" {
+		c.Type = TypeWeb // default: backward-compatible with files written before types existed
+	}
+	if c.Type != TypeWeb && c.Type != TypeApp {
+		return nil, fmt.Errorf("%s: invalid type %q (want %q or %q)", p, c.Type, TypeWeb, TypeApp)
+	}
 	return &c, nil
 }
 
@@ -66,10 +83,17 @@ func Save(dir string, c *Convention) error {
 	b.WriteString("# qwok app definition — how this project runs (read by `qwok run`).\n")
 	b.WriteString(fmt.Sprintf("name = %q\n", c.Name))
 	b.WriteString(fmt.Sprintf("cmd  = %q\n", c.Cmd))
-	if c.AppPort > 0 {
-		b.WriteString(fmt.Sprintf("app_port = %d\n", c.AppPort))
+	if c.Type == TypeApp {
+		// Desktop / non-web: the command runs directly, so portless-only knobs
+		// (app_port) don't apply and are omitted.
+		b.WriteString("type = \"app\"   # desktop/non-web: run the command directly, no portless or URL\n")
 	} else {
-		b.WriteString("# app_port = 3000   # optional: pin a fixed port (default: portless auto-assigns)\n")
+		b.WriteString("# type = \"app\"   # set for desktop/non-web projects (run directly, no portless/URL)\n")
+		if c.AppPort > 0 {
+			b.WriteString(fmt.Sprintf("app_port = %d\n", c.AppPort))
+		} else {
+			b.WriteString("# app_port = 3000   # optional: pin a fixed port (default: portless auto-assigns)\n")
+		}
 	}
 	if len(c.Env) > 0 {
 		b.WriteString("\n[env]\n")
