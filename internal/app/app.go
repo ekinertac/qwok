@@ -30,7 +30,7 @@ type Status struct {
 	Path    string
 	Type    string // "web" or "app"
 	Running bool
-	URL     string // empty for app-type (no portless route)
+	URL     string // from portless for web, from .qwok.toml for app (may be empty)
 	Port    int    // from portless route store, 0 if unknown/not routed
 }
 
@@ -179,7 +179,7 @@ func Run(name string, force bool) (string, error) {
 		return "", err
 	}
 	if isApp {
-		return "", nil // no URL for desktop apps
+		return conv.URL, nil // empty for desktop apps
 	}
 	return portless.URL(name, entry.Path), nil
 }
@@ -195,9 +195,10 @@ func List() ([]Status, error) {
 		path := reg.Apps[name].Path
 		s := Status{Name: name, Path: path, Type: convention.TypeWeb}
 		s.Running = Running(name)
-		// app-type apps have no portless route/URL; only enrich web apps.
+		// app-type apps have no portless route; their URL is the one they name, if any.
 		if conv, err := convention.Load(path); err == nil && conv.Type == convention.TypeApp {
 			s.Type = convention.TypeApp
+			s.URL = conv.URL
 		} else {
 			s.URL = portless.URL(name, path)
 			if s.Running {
@@ -251,13 +252,17 @@ func LogPath(name string) (string, error) {
 }
 
 // URL exposes the canonical URL for the `open` command. App-type projects have
-// no URL, so this reports that rather than inventing one.
+// one only if their .qwok.toml names it, so this reports that rather than
+// inventing one.
 func URL(name string) (string, error) {
 	entry, conv, err := resolve(name)
 	if err != nil {
 		return "", err
 	}
 	if conv.Type == convention.TypeApp {
+		if conv.URL != "" {
+			return conv.URL, nil
+		}
 		return "", fmt.Errorf("%q is a desktop app (type=app) — it has no URL to open", name)
 	}
 	return portless.URL(name, entry.Path), nil

@@ -12,6 +12,7 @@ package convention
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -34,11 +35,14 @@ const (
 // Convention is the parsed .qwok.toml. Name must match the registry key and the
 // portless route/subdomain so http(s)://<name>.localhost is consistent for web
 // apps. Type selects the run model (see the Type* constants); AppPort applies
-// only to web apps.
+// only to web apps. URL applies only to app-type: it is the address of a server
+// that portless does not route (launchd, Docker, another host), shown by list and
+// used by open. Web apps always get theirs from portless.
 type Convention struct {
 	Name    string            `toml:"name"`
 	Cmd     string            `toml:"cmd"`
 	Type    string            `toml:"type,omitempty"`
+	URL     string            `toml:"url,omitempty"`
 	AppPort int               `toml:"app_port,omitempty"`
 	Env     map[string]string `toml:"env,omitempty"`
 }
@@ -71,6 +75,16 @@ func Load(dir string) (*Convention, error) {
 	if c.Type != TypeWeb && c.Type != TypeApp {
 		return nil, fmt.Errorf("%s: invalid type %q (want %q or %q)", p, c.Type, TypeWeb, TypeApp)
 	}
+	if c.URL != "" {
+		if c.Type != TypeApp {
+			return nil, fmt.Errorf("%s: 'url' needs type = %q (web apps get their URL from portless)", p, TypeApp)
+		}
+		// This file travels with repos, and `open` acts on files, apps and flags too.
+		u, err := url.Parse(c.URL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return nil, fmt.Errorf("%s: invalid url %q (want http:// or https://)", p, c.URL)
+		}
+	}
 	return &c, nil
 }
 
@@ -87,6 +101,9 @@ func Save(dir string, c *Convention) error {
 		// Desktop / non-web: the command runs directly, so portless-only knobs
 		// (app_port) don't apply and are omitted.
 		b.WriteString("type = \"app\"   # desktop/non-web: run the command directly, no portless or URL\n")
+		if c.URL != "" {
+			b.WriteString(fmt.Sprintf("url = %q\n", c.URL))
+		}
 	} else {
 		b.WriteString("# type = \"app\"   # set for desktop/non-web projects (run directly, no portless/URL)\n")
 		if c.AppPort > 0 {

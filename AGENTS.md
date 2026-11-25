@@ -44,8 +44,8 @@ Apps have a `type` (`.qwok.toml`, default `web`): `web` wraps the command in
 portless (free port + proxy + `.localhost` URL) and `run` ensures the proxy is up
 first — starting it in the foreground so portless can sudo-prompt once, since the
 detached launch has no TTY for that prompt. `app` (`qwok add --app`) is for
-desktop/non-web projects: the command runs directly, no portless, no URL,
-`app_port` ignored. The whole process/registry/lifecycle core is type-agnostic;
+desktop/non-web projects: the command runs directly, no portless, no URL unless
+`.qwok.toml` names one (`url`, http/https only, app-type only), `app_port` ignored. The whole process/registry/lifecycle core is type-agnostic;
 only the portless wrap, URL, and proxy-ensure are gated on `type == web`.
 
 ## Conventions

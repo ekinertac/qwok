@@ -29,6 +29,45 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestURLRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	in := &Convention{Name: "a", Cmd: "./serve", Type: TypeApp, URL: "https://host.example:8798/x"}
+	if err := Save(dir, in); err != nil {
+		t.Fatal(err)
+	}
+	out, err := Load(dir)
+	if err != nil || out.URL != in.URL {
+		t.Fatalf("Load = %+v, %v (want url %q)", out, err, in.URL)
+	}
+}
+
+// `qwok open` hands the url to open(1), and the file comes with cloned repos, so
+// anything but a web address must be refused.
+func TestURLMustBeAWebAddress(t *testing.T) {
+	for _, bad := range []string{"host.example", "file:///etc/hosts", "-a Calculator", "https://", "javascript:1", "http://a b"} {
+		dir := t.TempDir()
+		body := "name=\"a\"\ncmd=\"b\"\ntype=\"app\"\nurl=\"" + bad + "\"\n"
+		if err := os.WriteFile(filepath.Join(dir, FileName), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Load(dir); err == nil {
+			t.Errorf("url %q should be rejected", bad)
+		}
+	}
+}
+
+// A web app gets its URL from portless, so a url line there must not be ignored in silence.
+func TestURLIsOnlyForAppType(t *testing.T) {
+	dir := t.TempDir()
+	body := "name=\"a\"\ncmd=\"b\"\nurl=\"https://host.example\"\n"
+	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(dir); err == nil {
+		t.Fatal("url on a web app should be rejected")
+	}
+}
+
 func TestTypeRoundTripAndDefault(t *testing.T) {
 	// No type -> defaults to web (backward compatible).
 	web := t.TempDir()

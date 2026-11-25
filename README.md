@@ -100,6 +100,14 @@ URL, and `qwok list` shows it as `type=app`. Everything else — background laun
 *launch-and-leave-running* programs (servers, GUI apps, watchers); interactive
 terminal programs that need a foreground TTY aren't a fit.
 
+If the app is a server with its own address (launchd, Docker, another host), add a
+`url` line to its `.qwok.toml`. `qwok list` then shows it and `qwok open` opens it:
+
+```toml
+type = "app"
+url  = "https://my-server.example:8443"
+```
+
 ### A note on ports (web apps)
 
 portless assigns each app a free port and routes its `.localhost` URL to it.
